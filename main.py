@@ -3,8 +3,6 @@ from PIL import ImageDraw
 import math
 import numpy as np
 import cv2
-import itertools
-
 
 def dopixelsneighbour(pixel1, pixel2):
     diffx = abs(pixel1[0] - pixel2[0])
@@ -34,14 +32,14 @@ def imageToData(funImage):
 illuminationangle = 1.6
 imagescale = 1
 
-houseImage = Image.open("smallhouses.png")
-houseData = imageToData(houseImage)
+houseImage = cv2.imread("smallhouses.png",0)
 
-shadowImage = Image.open("smallshadows.png")
-shadowData = imageToData(shadowImage)
+shadowImage = cv2.imread("smallshadows.png",0)
+imgheight, imgwidth = houseImage.shape
 
 #originalImage = Image.open("original.png")
-emptyCanvas = Image.new("RGB", (houseImage.size[0], houseImage.size[1]), (0, 0, 0))
+emptyCanvas = Image.new("RGB", (imgheight, imgwidth), (0, 0, 0))
+#emptyCanvas = np.zeros((imgheight,imgwidth,3), np.uint8)
 
 houses = []
 shadows = []
@@ -50,34 +48,32 @@ count = 0
 
 #1. проходим по всем пикселям и собираем их в дома (связные области черного цвета)
 
-pixelscounted = 0
 queue = []
 usedpixels = []
 
-#for x, y in itertools.product(range(0, houseImage.size[0]), range(0, houseImage.size[1])):
-houseArray = np.arange(houseImage.size[0]*houseImage.size[1]).reshape(houseImage.size[0], houseImage.size[1])
-for index, data in np.ndenumerate(houseArray):
-    x = index[0]
-    y = index[1]
-    count += 1
-    print(count, "of", houseImage.size[0]*houseImage.size[1])
-    if (x, y) not in usedpixels:
-        usedpixels.append((x, y))
-        if houseData[y][x] == [0, 0, 0]:
-            queue.append((x, y))
-            house = []
+for x in range(imgheight):
+    for y in range(imgwidth):
 
-            while len(queue) > 0:
-                cur = queue.pop(0)
-                house.append(cur)
-                for x, y in [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]:
-                    if (0 <= (cur[0] + x) < houseImage.size[0]) & (0 <= (cur[1] + y) < houseImage.size[1]) & ((cur[0] + x, cur[1] + y) not in usedpixels):
-                        #if houseImage.getpixel((cur[0] + x, cur[1] + y)) == (0, 0, 0, 255):
-                        if houseData[cur[1] + y][cur[0] + x] == [0, 0, 0]:
-                            usedpixels.append((cur[0] + x, cur[1] + y))
-                            queue.append((cur[0] + x, cur[1] + y))
+        count += 1
+        print(count, "of", imgheight*imgwidth)
 
-            houses.append(house)
+        if (x, y) not in usedpixels:
+            usedpixels.append((x, y))
+            if houseImage[y,x] == 0:
+
+                queue.append((x, y))
+                house = []
+
+                while len(queue) > 0:
+                    cur = queue.pop(0)
+                    house.append(cur)
+                    for xshift, yshift in [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]:
+                        if (0 <= (cur[0] + xshift) < imgheight) & (0 <= (cur[1] + yshift) < imgwidth) & ((cur[0] + xshift, cur[1] + yshift) not in usedpixels):
+                            if (houseImage[cur[1] + yshift, cur[0] + xshift] == 0):
+                                usedpixels.append((cur[0] + xshift, cur[1] + yshift))
+                                queue.append((cur[0] + xshift, cur[1] + yshift))
+
+                houses.append(house)
 
 print("step 1: housalization complete")
 
@@ -88,11 +84,11 @@ print("step 2: house sorting complete")
 
 #3. создаем лист пикселей теней для перебора
 shadowpixels = []
-for x in range(0, shadowImage.size[0]):
-    for y in range(0, shadowImage.size[1]):
+for x in range(imgheight):
+    for y in range(imgwidth):
         # pixel = shadowImage.getpixel((x, y))
-        pixel = shadowData[y][x]
-        if pixel == [0, 0, 0]:
+        pixel = shadowImage[y][x]
+        if pixel == 0:
             shadowpixels.append((x, y))
 
 print("step 3: shadow pixel collecting complete")
