@@ -14,6 +14,9 @@ def dopixelsneighbour(pixel1, pixel2):
 def distancefromsun(pixel, angle): #
     return pixel[0] * math.cos(angle) - pixel[1] * math.sin(angle)
 
+def distancebetweenpixels(pixel1, pixel2): #
+    return math.sqrt((pixel1[0] - pixel2[0]) * (pixel1[0] - pixel2[0]) + (pixel1[1] - pixel2[1]) * (pixel1[1] - pixel2[1]))
+
 def reversecolor(color):
     return 255 - color[0], 255 - color[1], 255 - color[2]
 
@@ -125,16 +128,16 @@ d = ImageDraw.Draw(emptyCanvas)
 count = 0
 step = 255 // len(result)
 for key in result:
-    for h in result[key][0]:
-        #print(h[0], " ", h[1])
-        emptyCanvas.putpixel(h, (step * count, 255 - step * count, step * count))
-    farthestHousePix = max([distancefromsun(pixel, illuminationangle) for pixel in result[key][0]])
     for s in result[key][1]:
         emptyCanvas.putpixel(s, (255 - step * count, step * count, 255 - step * count))
+    for h in result[key][0]:
+        emptyCanvas.putpixel(h, (step * count, 255 - step * count, step * count))
 
+    farthestHousePix = max(result[key][0], key=lambda x: distancefromsun(x, illuminationangle))
     if len(result[key][1]) != 0:#у здания есть тень
-        farthestShadowPix = max([distancefromsun(pixel, illuminationangle) for pixel in result[key][1]])
-        height = (farthestShadowPix - farthestHousePix) * imagescale
+        farthestShadowPix = max(result[key][1], key=lambda x: distancefromsun(x, illuminationangle))
+
+        height = distancebetweenpixels(farthestShadowPix, farthestHousePix) * imagescale
     else:#у здания нет тени
         height = 0
 
