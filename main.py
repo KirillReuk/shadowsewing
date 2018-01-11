@@ -32,13 +32,16 @@ def imageToData(funImage):
 illuminationangle = 1.6
 imagescale = 1
 
-houseImage = cv2.imread("smallhouses.png",0)
+houseImage = cv2.imread("houses.png",0)
 
-shadowImage = cv2.imread("smallshadows.png",0)
+shadowImage = cv2.imread("shadows.png",0)
+kernel = np.ones((5,5),np.uint8)
+shadowImage = cv2.morphologyEx(shadowImage, cv2.MORPH_OPEN, kernel)
+#shadowImage = cv2.dilate(cv2.erode(shadowImage,kernel,iterations = 2),kernel,iterations = 2)
 imgheight, imgwidth = houseImage.shape
 
-#originalImage = Image.open("original.png")
-emptyCanvas = Image.new("RGB", (imgheight, imgwidth), (0, 0, 0))
+originalImage = Image.open("original.png")
+emptyCanvas = Image.new("RGBA", (imgheight, imgwidth), (0, 0, 0, 0))
 #emptyCanvas = np.zeros((imgheight,imgwidth,3), np.uint8)
 
 houses = []
@@ -60,7 +63,6 @@ for x in range(imgheight):
         if (x, y) not in usedpixels:
             usedpixels.append((x, y))
             if houseImage[y,x] == 0:
-
                 queue.append((x, y))
                 house = []
 
@@ -96,7 +98,7 @@ print("step 3: shadow pixel collecting complete")
 result = {}
 
 #4. считаем тени
-for house in houses:
+for ind, house in enumerate(houses):
     # берем дом, мапим через преобразование + pi/2, смотрим макс и мин
     d1 = max(zip(house, house), key=lambda x: distancefromsun(x[1], illuminationangle + math.pi / 2))[0]
     d2 = min(zip(house, house), key=lambda x: distancefromsun(x[1], illuminationangle + math.pi / 2))[0]
@@ -117,8 +119,23 @@ for house in houses:
     for pixel in currentshadowpixels:
         shadowpixels.remove(pixel)
 
-    result[tuple(house[0])] = [house, currentshadowpixels] #словарь: ключи - верхние левые пиксели, значения - пары: пиксели дома, пиксели тени
+    pivotshadow = []
+    if len(currentshadowpixels) != 0:
+        pivot = min(currentshadowpixels, key=lambda x: distancefromsun(x, illuminationangle))
 
+        queue = []
+        queue.append(pivot)
+
+        while len(queue) > 0:
+            cur = queue.pop(0)
+            for pixel in currentshadowpixels:
+                if (pixel not in pivotshadow) & dopixelsneighbour(pixel, cur):
+                    queue.append(pixel)
+                    pivotshadow.append(pixel)
+
+
+    result[tuple(house[0])] = [house, pivotshadow] #словарь: ключи - верхние левые пиксели, значения - пары: пиксели дома, пиксели тени
+    print("shadow", ind, "cleanup complete")
 
 d = ImageDraw.Draw(emptyCanvas)
 count = 0
