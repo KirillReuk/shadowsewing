@@ -32,13 +32,18 @@ def imageToData(funImage):
 illuminationangle = 1.6
 imagescale = 1
 
-houseImage = cv2.imread("houses.png",0)
+houseImage = cv2.imread("bighouses.png",0)
+imgheight, imgwidth = houseImage.shape
+houseImage=cv2.copyMakeBorder(houseImage, top=1, bottom=1, left=1, right=1, borderType= cv2.BORDER_CONSTANT, value=255 ) #добавляем границу в 1 пиксель
+#cv2.imshow('image',houseImage)
+#cv2.waitKey(0)
+#cv2.destroyAllWindows()
 
-shadowImage = cv2.imread("shadows.png",0)
+shadowImage = cv2.imread("bigshadows.png",0)
 kernel = np.ones((5,5),np.uint8)
 shadowImage = cv2.morphologyEx(shadowImage, cv2.MORPH_OPEN, kernel)
 #shadowImage = cv2.dilate(cv2.erode(shadowImage,kernel,iterations = 2),kernel,iterations = 2)
-imgheight, imgwidth = houseImage.shape
+
 
 originalImage = Image.open("original.png")
 emptyCanvas = Image.new("RGBA", (imgheight, imgwidth), (0, 0, 0, 0))
@@ -54,24 +59,27 @@ count = 0
 queue = []
 usedpixels = []
 
-for x in range(imgheight):
-    for y in range(imgwidth):
+
+for x in range(1, imgwidth - 1):
+    for y in range(1, imgheight - 1):
 
         count += 1
-        print(count, "of", imgheight*imgwidth)
+        print("total", count, "of", imgheight*imgwidth, "(", round(100 * count / imgheight / imgwidth, 3), "%)")
 
-        if (x, y) not in usedpixels:
-            usedpixels.append((x, y))
-            if houseImage[y,x] == 0:
+        if houseImage[y, x] == 0:
+            if (x, y) not in usedpixels:
+                usedpixels.append((x, y))
                 queue.append((x, y))
                 house = []
 
                 while len(queue) > 0:
+                    #print("queue length:", len(queue), "top pixel:", queue[0])
                     cur = queue.pop(0)
-                    house.append(cur)
+                    house.append((cur[0] - 1, cur[1] - 1)) #вычитаем 1 из-за добавленной границы
                     for xshift, yshift in [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]:
-                        if (0 <= (cur[0] + xshift) < imgheight) & (0 <= (cur[1] + yshift) < imgwidth) & ((cur[0] + xshift, cur[1] + yshift) not in usedpixels):
-                            if (houseImage[cur[1] + yshift, cur[0] + xshift] == 0):
+                        #if (0 <= (cur[1] + yshift) < imgheight) & (0 <= (cur[0] + xshift) < imgwidth) & ((cur[0] + xshift, cur[1] + yshift) not in usedpixels):
+                        #    if (houseImage[cur[1] + yshift, cur[0] + xshift] == 0):
+                        if ((cur[0] + xshift, cur[1] + yshift) not in usedpixels) & (houseImage[cur[1] + yshift, cur[0] + xshift] == 0):
                                 usedpixels.append((cur[0] + xshift, cur[1] + yshift))
                                 queue.append((cur[0] + xshift, cur[1] + yshift))
 
@@ -135,7 +143,7 @@ for ind, house in enumerate(houses):
 
 
     result[tuple(house[0])] = [house, pivotshadow] #словарь: ключи - верхние левые пиксели, значения - пары: пиксели дома, пиксели тени
-    print("shadow", ind, "cleanup complete")
+    print("shadow", ind, "/", len(houses), "cleanup complete")
 
 d = ImageDraw.Draw(emptyCanvas)
 count = 0
