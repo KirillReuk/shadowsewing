@@ -44,7 +44,7 @@ shadowImage = cv2.morphologyEx(shadowImage, cv2.MORPH_OPEN, kernel)
 
 
 originalImage = Image.open("original.png")
-emptyCanvas = Image.new("RGBA", (imgheight, imgwidth), (0, 0, 0, 0))
+emptyCanvas = Image.new("RGBA", (imgwidth, imgheight), (0, 0, 0, 0))
 #emptyCanvas = np.zeros((imgheight,imgwidth,3), np.uint8)
 
 houses = []
@@ -89,13 +89,15 @@ houses.sort(key=lambda x: max(map(lambda y: distancefromsun(y, illuminationangle
 print("step 2: house sorting complete")
 
 #3. создаем лист пикселей теней для перебора
-shadowpixels = []
+shadowpixels = np.zeros((imgwidth, imgheight))
+shadowpixellist = []
 for x in range(imgwidth):
     for y in range(imgheight):
         # pixel = shadowImage.getpixel((x, y))
         pixel = shadowImage[y][x]
         if pixel == 0:
-            shadowpixels.append((x, y))
+            shadowpixels[x, y] = 1
+            shadowpixellist.append((x, y))
 
 print("step 3: shadow pixel collecting complete")
 
@@ -108,20 +110,21 @@ for ind, house in enumerate(houses):
     d2 = min(zip(house, house), key=lambda x: distancefromsun(x[1], illuminationangle + math.pi / 2))[0]
 
     currentshadowpixels = []
-    for pixel in shadowpixels:
-        angle1 = anglefromtwopoints(pixel, d1)
-        angle2 = anglefromtwopoints(pixel, d2)
-        if ((angle2 - angle1) % (2 * math.pi)) > math.pi:
-            angle1, angle2 = angle2, angle1
-        if angle2 < angle1:
-            angle2 += 2 * math.pi
+    for pixel in shadowpixellist:
+        if shadowpixels[pixel[0], pixel[1]] == 1:
+            angle1 = anglefromtwopoints(pixel, d1)
+            angle2 = anglefromtwopoints(pixel, d2)
+            if ((angle2 - angle1) % (2 * math.pi)) > math.pi:
+                angle1, angle2 = angle2, angle1
+            if angle2 < angle1:
+                angle2 += 2 * math.pi
 
-        if angle2 >= illuminationangle >= angle1:
-            currentshadowpixels.append(pixel)
-            #emptyCanvas.putpixel(pixel, (255, 0, 0))
+            if angle2 >= illuminationangle >= angle1:
+                currentshadowpixels.append(pixel)
+                #emptyCanvas.putpixel(pixel, (255, 0, 0))
 
     for pixel in currentshadowpixels:
-        shadowpixels.remove(pixel)
+        shadowpixels[pixel[0], pixel[1]] = 0
 
     pivotshadow = []
     if len(currentshadowpixels) != 0:
