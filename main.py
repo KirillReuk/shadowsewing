@@ -1,3 +1,4 @@
+from functools import reduce
 from PIL import Image
 from PIL import ImageDraw
 import math
@@ -29,23 +30,26 @@ def imageToData(funImage):
 
     return funData
 
+
 illuminationangle = 1.6
 imagescale = 1
 
 houseImage = cv2.imread("bighouses.png",0)
 imgheight, imgwidth = houseImage.shape
 imgsize = imgheight * imgwidth
-houseImage=cv2.copyMakeBorder(houseImage, top=1, bottom=1, left=1, right=1, borderType= cv2.BORDER_CONSTANT, value=255 ) #добавляем границу в 1 пиксель
 
 shadowImage = cv2.imread("bigshadows.png",0)
-kernel = np.ones((5,5),np.uint8)
+kernel = np.ones((5, 5), np.uint8)
 shadowImage = cv2.morphologyEx(shadowImage, cv2.MORPH_OPEN, kernel)
-#shadowImage = cv2.dilate(cv2.erode(shadowImage,kernel,iterations = 2),kernel,iterations = 2)
+# shadowImage = cv2.dilate(cv2.erode(shadowImage,kernel,iterations = 2),kernel,iterations = 2)
+
+lidarImage = cv2.imread("biglidar.png", 0)
+lidarBottomLevel = cv2.minMaxLoc(lidarImage)[0]
 
 
 originalImage = Image.open("original.png")
 emptyCanvas = Image.new("RGBA", (imgwidth, imgheight), (0, 0, 0, 0))
-#emptyCanvas = np.zeros((imgheight,imgwidth,3), np.uint8)
+# emptyCanvas = np.zeros((imgheight,imgwidth,3), np.uint8)
 
 houses = []
 shadows = []
@@ -58,6 +62,7 @@ queue = []
 usedpixels = np.zeros((imgwidth + 2, imgheight + 2))
 
 
+houseImage = cv2.copyMakeBorder(houseImage, top=1, bottom=1, left=1, right=1, borderType= cv2.BORDER_CONSTANT, value=255 ) #добавляем границу в 1 пиксель
 for x in range(1, imgwidth + 1):
     for y in range(1, imgheight + 1):
 
@@ -88,6 +93,21 @@ houses.sort(key=lambda x: max(map(lambda y: distancefromsun(y, illuminationangle
 
 print("step 2: house sorting complete")
 
+# собираем точную высоту, вычисленную по лидару
+housesexactheight = list(map(lambda house: reduce(lambda a, b: a + b, map(lambda p: lidarImage[p[1], p[0]] - lidarBottomLevel, house)) / len(house), houses))
+# housesexactheight = []
+# for house in houses:
+#     sumpix = 0
+#     for pix in house:
+#         pixheight = lidarImage[pix[1], pix[0]] - lidarBottomLevel
+#         sumpix += pixheight
+#     sumpix = sumpix / len(house)
+#     housesexactheight.append(sumpix)
+
+# для каждого пикселя берем его лидарную высоту, берем среднее
+
+print("step 2.5: exact height calculation complete")
+
 #3. создаем лист пикселей теней для перебора
 shadowpixels = np.zeros((imgwidth, imgheight))
 shadowpixellist = []
@@ -110,6 +130,7 @@ for ind, house in enumerate(houses):
     d2 = min(zip(house, house), key=lambda x: distancefromsun(x[1], illuminationangle + math.pi / 2))[0]
 
     currentshadowpixels = []
+    currentshadowpixelcanvas = np.zeros((imgwidth + 2, imgheight + 2))
     for pixel in shadowpixellist:
         if shadowpixels[pixel[0], pixel[1]] == 1:
             angle1 = anglefromtwopoints(pixel, d1)
@@ -121,6 +142,7 @@ for ind, house in enumerate(houses):
 
             if angle2 >= illuminationangle >= angle1:
                 currentshadowpixels.append(pixel)
+                currentshadowpixelcanvas[pixel[0], pixel[1]] = 1
                 #emptyCanvas.putpixel(pixel, (255, 0, 0))
 
     for pixel in currentshadowpixels:
@@ -135,18 +157,24 @@ for ind, house in enumerate(houses):
 
         while len(queue) > 0:
             cur = queue.pop(0)
-            for pixel in currentshadowpixels:
-                if (pixel not in pivotshadow) & dopixelsneighbour(pixel, cur):
-                    queue.append(pixel)
-                    pivotshadow.append(pixel)
+            #for pixel in currentshadowpixels: #вместо перебора всех пикселей перебирать только соседние?
+            for xshift, yshift in [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]:
+               if (0 <= cur[0] + xshift < imgwidth, 0 <= cur[1] + yshift < imgheight):
+                    pixel = cur[0] + xshift, cur[1] + yshift
+
+                    #if (pixel not in pivotshadow) & dopixelsneighbour(pixel, cur):
+                    if (pixel not in pivotshadow) & (currentshadowpixelcanvas[pixel[0], pixel[1]] == 1):
+                        queue.append(pixel)
+                        pivotshadow.append(pixel)
 
 
     result[tuple(house[0])] = [house, pivotshadow] #словарь: ключи - верхние левые пиксели, значения - пары: пиксели дома, пиксели тени
-    print("shadow", ind, "/", len(houses), "cleanup complete")
+    print("shadow", ind + 1, "/", len(houses), "cleanup complete", "(", round(100 * ind / len(houses), 3), "%)")
 
 #рисуем результат
 d = ImageDraw.Draw(emptyCanvas)
-for key in result:
+sumheight = 0
+for ind, key in enumerate(result):
     for s in result[key][1]:
         emptyCanvas.putpixel(s, (255, 0, 255))
     for h in result[key][0]:
@@ -156,12 +184,16 @@ for key in result:
     if len(result[key][1]) != 0:#у здания есть тень
         farthestShadowPix = max(result[key][1], key=lambda x: distancefromsun(x, illuminationangle))
 
-        height = distancebetweenpixels(farthestShadowPix, farthestHousePix) * imagescale
+        height = abs(distancebetweenpixels(farthestShadowPix, farthestHousePix) * imagescale - housesexactheight[ind])
+        # height = housesexactheight[ind]
     else:#у здания нет тени
         height = 0
 
-    d.text(key, str(round(height, 2)))
+    sumheight += height
+    d.text(key, str(round(height, 1)))
+
 print(len(houses))
+print("average error: ", sumheight / len(houses))
 
 emptyCanvas.show()
 #originalImage.paste(emptyCanvas, (0, 0), emptyCanvas)
